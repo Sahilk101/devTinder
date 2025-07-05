@@ -1,26 +1,32 @@
-const adminAuth = (req, res, next) => {
-    const token = "xyz"
-    const isAdmin = token === "xyz"; // Simulating admin check
+const jwt = require('jsonwebtoken'); // For JWT token generation and verification
+const User = require('../models/user'); // Import the User model
 
-    if (isAdmin) {
-        next(); // Proceed to the next middleware or route handler
-    } else {
-        res.status(403).send('Access denied. Admins only.');
+
+const userAuth = async (req, res, next) => {
+
+    const { token } = req.cookies; // Get the token from cookies
+    if (!token) {
+        return res.status(401).send('Access denied. No token provided'); // If no token, return 401
     }
-}
 
-const userAuth = (req, res, next) => {
-    const token = "abc"
-    const isUser = token === "abc"; // Simulating user check
+    console.log('Token received:', token); // Log the received token for debugging
 
-    if (isUser) {
-        next(); // Proceed to the next middleware or route handler
-    } else {
-        res.status(403).send('Access denied. Users only.');
+    try {
+        const decoded = jwt.verify(token, 'your_jwt_secret');
+        const id = decoded.id; // Extract user ID from the decoded token
+        const user = await User.findById(id);
+        if (!user) {
+            return res.status(404).send('User not found'); // If user not found, return 404
+        }
+        req.user = user
+        next(); // Call next middleware or route handler
+    } catch (error) {
+        console.error('Token verification failed:', error);
+        return res.status(400).send('Invalid token'); // If token is invalid, return 400
     }
+
 }
 
 module.exports = {
-    adminAuth,
     userAuth
 }

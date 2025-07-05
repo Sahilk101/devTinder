@@ -1,11 +1,15 @@
 const express = require('express');
 const connectDB = require('./config/database'); // Ensure database connection is established
 const User = require('./models/user'); // Import the User model
-const { validateSignUpData } = require('./utils/validation') // Import validation function
-const bcrypt = require('bcrypt'); // Import bcrypt for password hashing
+const { validateSignUpData } = require('./utils/validation')
+const bcrypt = require('bcrypt');
+const cookieParser = require('cookie-parser'); // Middleware to parse cookies
+const jwt = require('jsonwebtoken'); // For JWT token generation and verification\
+const { userAuth } = require('./middlewares/auth');
 
 const app = express();
 app.use(express.json()); // Middleware to parse JSON bodies
+app.use(cookieParser()); // Use cookie parser middleware to handle cookies
 
 app.post('/sign-up', async (req, res) => {
     try {
@@ -40,20 +44,40 @@ app.post('/login', async (req, res) => {
         if (!email || !password) {
             return res.status(400).send('Email and password are required'); // If email or password is missing, return 400
         }
-        const user = await User.find({ email }); // Find user by email
+        const user = await User.findOne({ email }); // Find user by email
         if (!user || user.length === 0) {
-            return res.status(404).send('User not found'); // If user not found, return 404
+            return res.status(404).send('User not found');
         }
-        const isPasswordValid = await bcrypt.compare(password, user[0].password); // Compare provided password with hashed password in database
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+
         if (!isPasswordValid) {
-            return res.status(401).send('Invalid password'); // If password is invalid, return 401
+            return res.status(401).send('Invalid password');
         }
-        return res.status(200).send('Login successful'); // If login is successful, return 200
+
+        const token = await user.getJWT(); // Generate JWT token using user method
+        console.log('Generated token:', token); // Log the generated token
+
+
+        res.cookie('token', token); // Set the token in a cookie
+        return res.status(200).send('Login successful');
     } catch (error) {
         console.error('Error during login:', error);
         return res.status(500).send('Internal Server Error'); // Return 500 if an error occurs
     }
 
+})
+
+app.get('/profile', userAuth, async (req, res) => {
+    try {
+        const user = req.user // Find user by ID from token
+        if (!user) {
+            return res.status(404).send('User not found'); // If user not found, return 404
+        }
+        return res.status(200).json(user); // Return user profile as JSON
+    } catch (error) {
+        console.error('Error fetching profile:', error);
+        return res.status(500).send('Internal Server Error'); // Return 500 if an error occurs
+    }
 })
 
 app.get('/users', async (req, res) => {
@@ -86,7 +110,7 @@ app.get('/user', async (req, res) => {
     }
 })
 
-// Connect to the database
+// Connect to the database  
 connectDB().then(() => {
     console.log('Database connected successfully');
     app.listen(3000, () => {
